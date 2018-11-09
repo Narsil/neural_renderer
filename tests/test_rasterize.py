@@ -50,7 +50,7 @@ class TestRasterize(unittest.TestCase):
         # create renderer
         renderer = nr.Renderer()
         renderer.camera.position = self.position
-        renderer.image_size = 256
+        renderer.camera.image_size = 256
         renderer.anti_aliasing = False
 
         # render
@@ -99,7 +99,7 @@ class TestRasterize(unittest.TestCase):
         # create renderer
         renderer = nr.Renderer()
         renderer.camera.position = self.position
-        renderer.image_size = 256
+        renderer.camera.image_size = 256
         renderer.anti_aliasing = False
         renderer.light_intensity_ambient = 1.0
         renderer.light_intensity_directional = 0.0
@@ -132,9 +132,9 @@ class TestRasterize(unittest.TestCase):
 
         renderer = nr.Renderer()
         renderer.camera.position = self.position
-        renderer.image_size = 64
+        renderer.camera.image_size = 64
         renderer.anti_aliasing = False
-        renderer.perspective = False
+        renderer.camera.perspective = False
         renderer.light_intensity_ambient = 1.0
         renderer.light_intensity_directional = 0.0
 
@@ -170,9 +170,9 @@ class TestRasterize(unittest.TestCase):
 
         renderer = nr.Renderer()
         renderer.position = self.position
-        renderer.image_size = 64
+        renderer.camera.image_size = 64
         renderer.anti_aliasing = False
-        renderer.perspective = False
+        renderer.camera.perspective = False
         renderer.light_intensity_ambient = 1.0
         renderer.light_intensity_directional = 0.0
 

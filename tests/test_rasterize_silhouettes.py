@@ -29,7 +29,7 @@ class TestRasterizeSilhouettes(unittest.TestCase):
         renderer = nr.Renderer()
         renderer.camera.position = self.position
 
-        renderer.image_size = 256
+        renderer.camera.image_size = 256
         renderer.anti_aliasing = False
 
         images = renderer(vertices, faces, mode='silhouettes')
@@ -61,9 +61,9 @@ class TestRasterizeSilhouettes(unittest.TestCase):
         renderer = nr.Renderer()
         renderer.camera.position = self.position
 
-        renderer.image_size = 64
+        renderer.camera.image_size = 64
         renderer.anti_aliasing = False
-        renderer.perspective = False
+        renderer.camera.perspective = False
 
         vertices = torch.from_numpy(np.array(vertices, np.float32)).cuda()
         faces = torch.from_numpy(np.array(faces, np.int32)).cuda()
@@ -95,9 +95,9 @@ class TestRasterizeSilhouettes(unittest.TestCase):
         renderer = nr.Renderer()
         renderer.camera.position = self.position
 
-        renderer.image_size = 64
+        renderer.camera.image_size = 64
         renderer.anti_aliasing = False
-        renderer.perspective = False
+        renderer.camera.perspective = False
 
         vertices = torch.from_numpy(np.array(vertices, np.float32)).cuda()
         faces = torch.from_numpy(np.array(faces, np.int32)).cuda()
@@ -108,7 +108,6 @@ class TestRasterizeSilhouettes(unittest.TestCase):
         loss = torch.sum(torch.abs(images[:, pyi, pxi]))
         loss.backward()
 
-        print(vertices.grad, grad_ref)
         assert(np.allclose(vertices.grad, grad_ref, rtol=1e-2))
 
 

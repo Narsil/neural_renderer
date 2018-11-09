@@ -398,8 +398,6 @@ __global__ void backward_pixel_map_cuda_kernel(
                             rgb_map_p += 3 * map_offset;
                             grad_rgb_map_p += 3 * map_offset;
                         }
-                        if (diff_grad <= 0)
-                            continue;
                         if (p[1][0] != d0) {
                             scalar_t dist = (p[1][0] - p[0][0]) / (p[1][0] - d0) * (d1 - d1_cross) * 2. / is;
                             dist = (0 < dist) ? dist + eps : dist - eps;
@@ -478,9 +476,6 @@ __global__ void backward_pixel_map_cuda_kernel(
                             for (int k = 0; k < 3; k++)
                                 diff_grad += (rgb_map_p[k] - rgb_out[k]) * grad_rgb_map_p[k];
                         }
-                        if (diff_grad <= 0)
-                            continue;
-
                         if (p[1][0] != d0) {
                             scalar_t dist = (p[1][0] - p[0][0]) / (p[1][0] - d0) * (d1 - d1_cross) * 2. / is;
                             dist = (0 < dist) ? dist + eps : dist - eps;

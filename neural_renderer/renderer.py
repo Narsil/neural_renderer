@@ -10,7 +10,7 @@ import neural_renderer as nr
 
 class Renderer(nn.Module):
     def __init__(self, anti_aliasing=True, background_color=[0,0,0],
-                 fill_back=True, camera=None, perspective=True,
+                 fill_back=True, camera=None,
                  light_intensity_ambient=0.5, light_intensity_directional=0.5,
                  light_color_ambient=[1,1,1], light_color_directional=[1,1,1],
                  light_direction=[0,1,0]):
