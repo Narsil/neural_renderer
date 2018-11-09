@@ -24,7 +24,6 @@ def main():
 
     # other settings
     camera_distance = 2.732
-    elevation = 30
     texture_size = 2
 
     # load .obj
@@ -38,18 +37,23 @@ def main():
     # to gpu
 
     # create renderer
-    renderer = nr.Renderer(camera_mode='look_at')
+    renderer = nr.Renderer()
 
-    # draw object
-    loop = tqdm.tqdm(range(0, 360, 4))
-    writer = imageio.get_writer(args.filename_output, mode='I')
-    for num, azimuth in enumerate(loop):
-        loop.set_description('Drawing')
-        renderer.eye = nr.get_points_from_angles(camera_distance, elevation, azimuth)
-        images = renderer(vertices, faces, textures)  # [batch_size, RGB, image_size, image_size]
-        image = images.detach().cpu().numpy()[0].transpose((1, 2, 0))  # [image_size, image_size, RGB]
-        writer.append_data((255*image).astype(np.uint8))
-    writer.close()
+    with imageio.get_writer(args.filename_output, mode='I') as writer:
+        loop = tqdm.tqdm(range(0, 360, 4))
+        for num, azimuth in enumerate(loop):
+            loop.set_description('Drawing')
+
+            renderer.camera.position = torch.tensor([0, 0, camera_distance]).float().reshape(1, 1, 3)
+            angle = azimuth / 360 * 2 * np.pi
+            axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+
+            renderer.camera.rotation = nr.rotation_from_axis(axis)
+
+            images = renderer(vertices, faces, textures)  # [batch_size, RGB, image_size, image_size]
+            image = images.detach().cpu().numpy()[0].transpose((1, 2, 0))  # [image_size, image_size, RGB]
+            writer.append_data((255*image).astype(np.uint8))
+
 
 if __name__ == '__main__':
     main()

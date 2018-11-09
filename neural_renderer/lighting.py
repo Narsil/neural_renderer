@@ -53,5 +53,5 @@ def lighting(faces, textures, intensity_ambient=0.5, intensity_directional=0.5,
 
     # apply
     light = light[:,:,None, None, None, :]
-    textures *= light
-    return textures
+    _textures = textures * light
+    return _textures

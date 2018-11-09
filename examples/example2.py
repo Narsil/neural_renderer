@@ -9,14 +9,14 @@ import glob
 import torch
 import torch.nn as nn
 import numpy as np
-from skimage.io import imread, imsave
+from imageio import imread, imsave, get_writer
 import tqdm
-import imageio
 
 import neural_renderer as nr
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
+
 
 class Model(nn.Module):
     def __init__(self, filename_obj, filename_ref):
@@ -37,22 +37,25 @@ class Model(nn.Module):
         self.register_buffer('image_ref', image_ref)
 
         # setup renderer
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
         self.renderer = renderer
 
     def forward(self):
-        self.renderer.eye = nr.get_points_from_angles(2.732, 0, 90)
-        image = self.renderer(self.vertices, self.faces, mode='silhouettes')
-        loss = torch.sum((image - self.image_ref[None, :, :])**2)
-        return loss
+        angle = np.pi / 2
+        axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+        self.renderer.camera.position = torch.tensor([0, 0, 2.732]).float().reshape(1, 1, 3)
+        self.renderer.camera.rotation = nr.rotation_from_axis(axis)
+
+        images = self.renderer(self.vertices, self.faces, mode='silhouettes')
+        loss = torch.sum((images - self.image_ref[None, :, :])**2)
+        return images, loss
 
 
 def make_gif(filename):
-    with imageio.get_writer(filename, mode='I') as writer:
+    with get_writer(filename, mode='I') as writer:
         for filename in sorted(glob.glob('/tmp/_tmp_*.png')):
-            writer.append_data(imageio.imread(filename))
+            writer.append_data(imread(filename))
             os.remove(filename)
-    writer.close()
 
 
 def main():
@@ -76,11 +79,11 @@ def main():
         loop.set_description('Optimizing')
         # optimizer.target.cleargrads()
         optimizer.zero_grad()
-        loss = model()
+        images, loss = model()
         loss.backward()
         optimizer.step()
-        images = model.renderer(model.vertices, model.faces, mode='silhouettes')
         image = images.detach().cpu().numpy()[0]
+        image = (image * 255).astype(np.uint8)
         imsave('/tmp/_tmp_%04d.png' % i, image)
     make_gif(args.filename_output_optimization)
 
@@ -88,9 +91,14 @@ def main():
     loop = tqdm.tqdm(range(0, 360, 4))
     for num, azimuth in enumerate(loop):
         loop.set_description('Drawing')
-        model.renderer.eye = nr.get_points_from_angles(2.732, 0, azimuth)
+
+        angle = azimuth / 360 * 2 * np.pi
+        axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+        model.renderer.camera.rotation = nr.rotation_from_axis(axis)
+
         images = model.renderer(model.vertices, model.faces, model.textures)
         image = images.detach().cpu().numpy()[0].transpose((1, 2, 0))
+        image = (image * 255).astype(np.uint8)
         imsave('/tmp/_tmp_%04d.png' % num, image)
     make_gif(args.filename_output_result)
 

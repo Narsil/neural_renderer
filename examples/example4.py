@@ -8,14 +8,14 @@ import glob
 import torch
 import torch.nn as nn
 import numpy as np
-from skimage.io import imread, imsave
+from imageio import imread, imsave, get_writer
 import tqdm
-import imageio
 
 import neural_renderer as nr
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
+
 
 class Model(nn.Module):
     def __init__(self, filename_obj, filename_ref=None):
@@ -34,12 +34,17 @@ class Model(nn.Module):
         image_ref = torch.from_numpy((imread(filename_ref).max(-1) != 0).astype(np.float32))
         self.register_buffer('image_ref', image_ref)
 
-        # camera parameters
-        self.camera_position = nn.Parameter(torch.from_numpy(np.array([6, 10, -14], dtype=np.float32)))
-
         # setup renderer
-        renderer = nr.Renderer(camera_mode='look_at')
-        renderer.eye = self.camera_position
+        renderer = nr.Renderer()
+
+        # camera parameters
+        self.camera_position = nn.Parameter(torch.from_numpy(np.array([0.5, 0.5 ,14], dtype=np.float32)))
+        renderer.camera.position = self.camera_position
+
+        angle = 0
+        axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+        renderer.camera.rotation = nr.rotation_from_axis(axis)
+
         self.renderer = renderer
 
     def forward(self):
@@ -49,20 +54,28 @@ class Model(nn.Module):
 
 
 def make_gif(filename):
-    with imageio.get_writer(filename, mode='I') as writer:
+    with get_writer(filename, mode='I') as writer:
         for filename in sorted(glob.glob('/tmp/_tmp_*.png')):
             writer.append_data(imread(filename))
             os.remove(filename)
-    writer.close()
 
 
 def make_reference_image(filename_ref, filename_obj):
-    model = Model(filename_obj)
-    model.cuda()
+    vertices, faces = nr.load_obj(filename_obj)
+    vertices = vertices[None, :, :]
+    faces = faces[None, :, :]
+    texture_size = 2
+    textures = torch.ones(1, faces.shape[1], texture_size, texture_size, texture_size, 3, dtype=torch.float32).cuda()
+    renderer = nr.Renderer()
 
-    model.renderer.eye = nr.get_points_from_angles(2.732, 30, -15)
-    images = model.renderer.render(model.vertices, model.faces, torch.tanh(model.textures))
-    image = images.detach().cpu().numpy()[0]
+    renderer.camera.position = torch.tensor([0, 0, 2.732]).float()
+    angle = 0
+    axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+    renderer.camera.rotation = nr.rotation_from_axis(axis)
+
+    images = renderer(vertices, faces, torch.tanh(textures))
+    image = images.detach().cpu().numpy()[0].transpose(1, 2, 0)
+    image = (image * 255).astype(np.uint8)
     imsave(filename_ref, image)
 
 
@@ -89,11 +102,14 @@ def main():
         loss = model()
         loss.backward()
         optimizer.step()
+
+        # Optimization happens in silhouette space, here we display texture.
         images = model.renderer(model.vertices, model.faces, torch.tanh(model.textures))
         image = images.detach().cpu().numpy()[0].transpose(1,2,0)
+        image = (image * 255).astype(np.uint8)
         imsave('/tmp/_tmp_%04d.png' % i, image)
         loop.set_description('Optimizing (loss %.4f)' % loss.data)
-        if loss.item() < 70:
+        if loss.item() < 100:
             break
     make_gif(args.filename_output)
 

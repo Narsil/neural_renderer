@@ -1,9 +1,10 @@
 import unittest
 import os
+import math
 
 import torch
 import numpy as np
-from skimage.io import imread
+from imageio import imread
 
 import neural_renderer as nr
 import utils
@@ -11,7 +12,13 @@ import utils
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
 
+
 class TestRasterizeDepth(unittest.TestCase):
+    def setUp(self):
+        batch_size = 4
+        camera_distance = 1 + 1 / math.tan(math.radians(30))
+        self.position = torch.tensor([0, 0, camera_distance]).float().reshape(1, 1, 3).expand(batch_size, 1, 3)
+
     def test_forward_case1(self):
         """Whether a silhouette by neural renderer matches that by Blender."""
 
@@ -19,7 +26,8 @@ class TestRasterizeDepth(unittest.TestCase):
         vertices, faces, _ = utils.load_teapot_batch()
 
         # create renderer
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
         renderer.image_size = 256
         renderer.anti_aliasing = False
 
@@ -39,7 +47,8 @@ class TestRasterizeDepth(unittest.TestCase):
         vertices, faces, _ = utils.load_teapot_batch()
 
         # create renderer
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
         renderer.image_size = 256
         renderer.anti_aliasing = False
 
@@ -60,11 +69,11 @@ class TestRasterizeDepth(unittest.TestCase):
             [0.8, 0.8, 0.5]]
         faces = [[0, 1, 2]]
 
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
         renderer.image_size = 64
         renderer.anti_aliasing = False
         renderer.perspective = False
-        renderer.camera_mode = 'none'
 
         vertices = torch.from_numpy(np.array(vertices, np.float32)).cuda()
         faces = torch.from_numpy(np.array(faces, np.int32)).cuda()
@@ -82,7 +91,7 @@ class TestRasterizeDepth(unittest.TestCase):
                 eps = 1e-3
                 vertices2 = vertices.clone()
                 vertices2[i, j] += eps
-                images = renderer.render_depth(vertices2, faces)
+                images = renderer(vertices2, faces, mode='depth')
                 loss2 = torch.sum((images[0, 15, 20] - 1)**2)
                 grad2[i, j] = ((loss2 - loss) / eps).item()
 

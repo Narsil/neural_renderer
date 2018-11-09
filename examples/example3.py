@@ -9,9 +9,8 @@ import glob
 import torch
 import torch.nn as nn
 import numpy as np
-from skimage.io import imread, imsave
+from imageio import imread, imsave, get_writer
 import tqdm
-import imageio
 
 import neural_renderer as nr
 
@@ -35,26 +34,28 @@ class Model(nn.Module):
         self.register_buffer('image_ref', image_ref)
 
         # setup renderer
-        renderer = nr.Renderer(camera_mode='look_at')
-        renderer.perspective = False
+        renderer = nr.Renderer()
         renderer.light_intensity_directional = 0.0
         renderer.light_intensity_ambient = 1.0
+
+        renderer.camera.position = torch.tensor([0, 0, 2.732]).float().reshape(1, 1, 3)
+
         self.renderer = renderer
 
-
     def forward(self):
-        self.renderer.eye = nr.get_points_from_angles(2.732, 0, np.random.uniform(0, 360))
+        angle = np.random.uniform(0, 360)
+        axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+        self.renderer.camera.rotation = nr.rotation_from_axis(axis)
         image = self.renderer(self.vertices, self.faces, torch.tanh(self.textures))
         loss = torch.sum((image - self.image_ref) ** 2)
         return loss
 
 
 def make_gif(filename):
-    with imageio.get_writer(filename, mode='I') as writer:
+    with get_writer(filename, mode='I') as writer:
         for filename in sorted(glob.glob('/tmp/_tmp_*.png')):
-            writer.append_data(imageio.imread(filename))
+            writer.append_data(imread(filename))
             os.remove(filename)
-    writer.close()
 
 
 def main():
@@ -70,7 +71,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.1, betas=(0.5,0.999))
     loop = tqdm.tqdm(range(300))
-    for _ in loop:
+    for num in loop:
         loop.set_description('Optimizing')
         optimizer.zero_grad()
         loss = model()
@@ -81,9 +82,13 @@ def main():
     loop = tqdm.tqdm(range(0, 360, 4))
     for num, azimuth in enumerate(loop):
         loop.set_description('Drawing')
-        model.renderer.eye = nr.get_points_from_angles(2.732, 0, azimuth)
+        angle = azimuth / 360 * 2 * np.pi
+        axis = angle * torch.tensor([0, 1, 0]).float().view(1, 1, 3)
+        model.renderer.camera.rotation = nr.rotation_from_axis(axis)
+
         images = model.renderer(model.vertices, model.faces, torch.tanh(model.textures))
         image = images.detach().cpu().numpy()[0].transpose((1, 2, 0))
+        image = (image * 255).astype(np.uint8)
         imsave('/tmp/_tmp_%04d.png' % num, image)
     make_gif(args.filename_output)
 

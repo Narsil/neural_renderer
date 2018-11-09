@@ -1,13 +1,42 @@
 import unittest
 import os
+import math
 
 import numpy as np
-from skimage.io import imsave
+from imageio import imsave
+import torch
+import torch.nn.functional as F
 
 import neural_renderer as nr
 
+
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
+
+
+def position_rotation_from_angles(distance, elevation, azimuth, at=[0, 0, 0], up=[0, 1, 0]):
+    """
+    Gives a position and a rotation from elevation and azimuth parameters
+    """
+    elevation = math.radians(elevation)
+    azimuth = math.radians(azimuth)
+    position = [distance * math.cos(elevation) * math.sin(azimuth),
+                distance * math.sin(elevation),
+                -distance * math.cos(elevation) * math.cos(azimuth)]
+
+    at = torch.tensor(at).float()[None, :]
+    position = torch.tensor(position).float()[None, :]
+    up = torch.tensor(up).float()[None, :]
+
+    z_axis = F.normalize(at - position, eps=1e-5)
+    x_axis = F.normalize(torch.cross(up, z_axis), eps=1e-5)
+    y_axis = F.normalize(torch.cross(z_axis, x_axis), eps=1e-5)
+
+    r = torch.cat((x_axis[:, :], y_axis[:, :], z_axis[:, :]), dim=0)
+
+    rotation = r.transpose(1, 0)
+    return position, rotation
+
 
 class TestCore(unittest.TestCase):
     def test_tetrahedron(self):
@@ -41,20 +70,25 @@ class TestCore(unittest.TestCase):
         assert (vertices.shape[0] == 1292)
 
     def test_texture(self):
-        renderer = nr.Renderer(camera_mode='look_at')
+        position, rotation = position_rotation_from_angles(2, 15, 30)
+        camera = nr.Camera(position=position, rotation=rotation)
+        renderer = nr.Renderer(camera=camera)
 
         vertices, faces, textures = nr.load_obj(
             os.path.join(data_dir, '1cde62b063e14777c9152a706245d48/model.obj'), load_texture=True)
 
-        renderer.eye = nr.get_points_from_angles(2, 15, 30)
-        images = renderer.render(vertices[None, :, :], faces[None, :, :], textures[None, :, :, :, :, :]).permute(0,2,3,1).detach().cpu().numpy()
-        imsave(os.path.join(data_dir, 'car.png'), images[0])
+        images = renderer(vertices[None, :, :], faces[None, :, :], textures[None, :, :, :, :, :]).permute(0,2,3,1).detach().cpu().numpy()
+        image = (images[0] * 255).astype(np.uint8)
+        imsave(os.path.join(data_dir, 'car.png'), image)
 
         vertices, faces, textures = nr.load_obj(
             os.path.join(data_dir, '4e49873292196f02574b5684eaec43e9/model.obj'), load_texture=True, texture_size=16)
-        renderer.eye = nr.get_points_from_angles(2, 15, -90)
-        images = renderer.render(vertices[None, :, :], faces[None, :, :], textures[None, :, :, :, :, :]).permute(0,2,3,1).detach().cpu().numpy()
-        imsave(os.path.join(data_dir, 'display.png'), images[0])
+        position, rotation = position_rotation_from_angles(2, 15, -90)
+        renderer.camera.position = position
+        renderer.camera.rotation = rotation
+        images = renderer(vertices[None, :, :], faces[None, :, :], textures[None, :, :, :, :, :]).permute(0,2,3,1).detach().cpu().numpy()
+        image = (images[0] * 255).astype(np.uint8)
+        imsave(os.path.join(data_dir, 'display.png'), image)
 
 
 if __name__ == '__main__':

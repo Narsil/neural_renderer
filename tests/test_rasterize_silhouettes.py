@@ -3,16 +3,22 @@ import os
 
 import torch
 import numpy as np
-from skimage.io import imread
+from imageio import imread
 
 import neural_renderer as nr
 import utils
+import math
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
 
 
 class TestRasterizeSilhouettes(unittest.TestCase):
+    def setUp(self):
+        batch_size = 4
+        camera_distance = 1 + 1 / math.tan(math.radians(30))
+        self.position = torch.tensor([0, 0, camera_distance]).float().reshape(1, 1, 3).expand(batch_size, 1, 3)
+
     def test_case1(self):
         """Whether a silhouette by neural renderer matches that by Blender."""
 
@@ -20,7 +26,9 @@ class TestRasterizeSilhouettes(unittest.TestCase):
         vertices, faces, _ = utils.load_teapot_batch()
 
         # create renderer
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
+
         renderer.image_size = 256
         renderer.anti_aliasing = False
 
@@ -50,7 +58,9 @@ class TestRasterizeSilhouettes(unittest.TestCase):
             [0., 0., 0.],
         ]
 
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
+
         renderer.image_size = 64
         renderer.anti_aliasing = False
         renderer.perspective = False
@@ -82,7 +92,9 @@ class TestRasterizeSilhouettes(unittest.TestCase):
             [3.00094461, - 1.55173182, 0.],
         ]
 
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
+
         renderer.image_size = 64
         renderer.anti_aliasing = False
         renderer.perspective = False
@@ -96,6 +108,7 @@ class TestRasterizeSilhouettes(unittest.TestCase):
         loss = torch.sum(torch.abs(images[:, pyi, pxi]))
         loss.backward()
 
+        print(vertices.grad, grad_ref)
         assert(np.allclose(vertices.grad, grad_ref, rtol=1e-2))
 
 

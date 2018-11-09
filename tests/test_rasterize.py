@@ -1,9 +1,11 @@
 import unittest
 import os
+import math
 
 import torch
+from torch.nn import functional as F
 import numpy as np
-from skimage.io import imread, imsave
+from imageio import imread, imsave
 
 import neural_renderer as nr
 import utils
@@ -11,7 +13,31 @@ import utils
 current_dir = os.path.dirname(os.path.realpath(__file__))
 data_dir = os.path.join(current_dir, 'data')
 
+
+def rotation_from_look_at(position, at=[0, 0, 0], up=[0, 1, 0]):
+    """
+    Gives a position and a rotation from elevation and azimuth parameters
+    """
+    at = torch.tensor(at).float()[None, :]
+    position = torch.tensor(position).float()[None, :]
+    up = torch.tensor(up).float()[None, :]
+
+    z_axis = F.normalize(at - position, eps=1e-5)
+    x_axis = F.normalize(torch.cross(up, z_axis), eps=1e-5)
+    y_axis = F.normalize(torch.cross(z_axis, x_axis), eps=1e-5)
+
+    r = torch.cat((x_axis[:, :], y_axis[:, :], z_axis[:, :]), dim=0)
+
+    rotation = r.transpose(1, 0)
+    return rotation
+
+
 class TestRasterize(unittest.TestCase):
+    def setUp(self):
+        batch_size = 4
+        camera_distance = 1 + 1 / math.tan(math.radians(30))
+        self.position = torch.tensor([0, 0, camera_distance]).float().reshape(1, 1, 3).expand(batch_size, 1, 3)
+
     def test_forward_case1(self):
         """Rendering a teapot without anti-aliasing."""
 
@@ -22,7 +48,8 @@ class TestRasterize(unittest.TestCase):
         textures = textures.cuda()
 
         # create renderer
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
         renderer.image_size = 256
         renderer.anti_aliasing = False
 
@@ -31,6 +58,8 @@ class TestRasterize(unittest.TestCase):
         images = images.detach().cpu().numpy()
         image = images[2]
         image = image.transpose((1, 2, 0))
+
+        image = (image * 255).astype(np.uint8)
 
         imsave(os.path.join(data_dir, 'test_rasterize1.png'), image)
 
@@ -44,8 +73,10 @@ class TestRasterize(unittest.TestCase):
         textures = textures.cuda()
 
         # create renderer
-        renderer = nr.Renderer(camera_mode='look_at')
-        renderer.eye = [1, 1, -2.7]
+        renderer = nr.Renderer()
+        p = [1, 1, -2.7]
+        renderer.camera.position = torch.tensor(p).view(1, 1, 3).expand(4, 1, 3)
+        renderer.camera.rotation = rotation_from_look_at(p).expand(4, 3, 3)
 
         # render
         images = renderer(vertices, faces, textures)
@@ -53,6 +84,7 @@ class TestRasterize(unittest.TestCase):
         image = images[2]
         image = image.transpose((1, 2, 0))
 
+        image = (image * 255).astype(np.uint8)
         imsave(os.path.join(data_dir, 'test_rasterize2.png'), image)
 
     def test_forward_case3(self):
@@ -65,7 +97,8 @@ class TestRasterize(unittest.TestCase):
         textures = textures.cuda()
 
         # create renderer
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
         renderer.image_size = 256
         renderer.anti_aliasing = False
         renderer.light_intensity_ambient = 1.0
@@ -97,7 +130,8 @@ class TestRasterize(unittest.TestCase):
             [0., 0., 0.],
         ]
 
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.camera.position = self.position
         renderer.image_size = 64
         renderer.anti_aliasing = False
         renderer.perspective = False
@@ -134,7 +168,8 @@ class TestRasterize(unittest.TestCase):
             [3.00094461, - 1.55173182, 0.],
         ]
 
-        renderer = nr.Renderer(camera_mode='look_at')
+        renderer = nr.Renderer()
+        renderer.position = self.position
         renderer.image_size = 64
         renderer.anti_aliasing = False
         renderer.perspective = False
@@ -146,7 +181,7 @@ class TestRasterize(unittest.TestCase):
         textures = torch.ones(faces.shape[0], 4, 4, 4, 3, dtype=torch.float32).cuda()
         grad_ref = torch.from_numpy(np.array(grad_ref, dtype=np.float32)).cuda()
         vertices, faces, textures, grad_ref = utils.to_minibatch((vertices, faces, textures, grad_ref))
-        vertices.requires_grad=True
+        vertices.requires_grad = True
 
         images = renderer(vertices, faces, textures)
         images = torch.mean(images, dim=1)
